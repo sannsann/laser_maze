@@ -3,20 +3,32 @@ class Laser
 
     @map = []
 
+    # Notes:
+    # => X designates rows and travels N, S
+    # => Y designates columns and travels W, E
     def initialize(layout)
         @map = layout.split("\n")
+
+        # Wall boundaries
+        @north_boundary = 0
+        @east_boundary = @map[0].length - 1
+        @south_boundary = @map.length - 1
+        @west_boundary = 0
+
+        # Travel counter
         @counter = 0
 
         # Initial direction of laser
         @direction = 'E'
 
-        # #find_laser returns the position of the laser as a tuple
-        laser_pos = find_laser.split(",")
-        @x_coord, @y_coord = laser_pos[0].to_i, laser_pos[1].to_i
-
-        # @history is used to track previous laser moves --
-        # duplicate trajectories indicate infinite loop
+        # @history is used to track previous laser moves
+        # duplicate trajectories indicate an infinite loop 
         @history = {}
+
+        # #find_laser returns the position of the laser as a tuple
+        laser_pos = find_laser
+        @x_coord = laser_pos[:x_coord]
+        @y_coord = laser_pos[:y_coord]
 
         self.fire
     end
@@ -25,84 +37,38 @@ class Laser
         while(!self.at_wall?)
             self.move
             @counter += 1
+
+            # Loop detection
+            if (previously_traveled?)
+                @counter = -1
+                return
+            else
+                # Log trajectory as traveled
+                @history[trajectory] = true
+            end     
         end
     end
 
     # Update the position and direction of the laser
-    # Contact with an object will update the direction according to the object, i.e. v => direction = 'S'
+    # Contact with an object will update the direction according to the object, 
+    # i.e. v # => direction = 'S'
     def move
+        # puts "#{@direction} #{@x_coord} #{@y_coord}"
         begin
             case @direction
                 when 'E'
-                @y_coord += 1
+                    @y_coord += 1
                 when 'S'
-                @x_coord += 1
+                    @x_coord += 1
                 when 'W'
-                @y_coord -= 1
+                    @y_coord -= 1
                 when 'N'
-                @x_coord -= 1
-            else
+                    @x_coord -= 1
             end
 
             # Update direction with respect to object at specified maze position
-            case @map[@x_coord][@y_coord]
-                when '>'
-                @direction = 'E'
-                when 'v'
-                @direction = 'S'
-                when '<'
-                @direction = 'W'
-                when '^'
-                @direction = 'N'
-                # 180 degree mirror case
-                when 'O'
-                    case @direction
-                    when 'E'
-                    @direction = 'W'
-                    when 'S'
-                    @direction = 'N'
-                    when 'W'
-                    @direction = 'E'
-                    when 'N'
-                    @direction = 'S'
-                    end
-                # Diagonal mirror case #1
-                when '/'
-                    case @direction
-                    when 'E'
-                    @direction = 'N'
-                    when 'S'
-                    @direction = 'W'
-                    when 'W'
-                    @direction = 'S'
-                    when 'N'
-                    @direction = 'E'
-                    end
-                # Diagonal mirror case #2
-                when '\\'
-                    case @direction
-                    when 'E'
-                    @direction = 'S'
-                    when 'S'
-                    @direction = 'E'
-                    when 'W'
-                    @direction = 'N'
-                    when 'N'
-                    @direction = 'W'
-                    end
-            else
-            end
-
-            # Checks if trajectory has been previously traveled by laser
-            # if so, we know a loop has been entered. Exit accordingly
-            if @history.has_value? ("#{@direction} #{@x_coord} #{@y_coord}")
-                puts "-1"
-                exit
-            else
-                @history[@counter] = "#{@direction} #{@x_coord} #{@y_coord}"
-            end
+            @direction = Doodad.redirect(@map[@x_coord][@y_coord], @direction)
         rescue
-            return
         end
     end
 
@@ -113,21 +79,99 @@ class Laser
 
     # Checks current position of laser to see if the position is outside of the dimensions of the laser
     def at_wall?
-        return @x_coord < 0 || @x_coord > @map.length - 1 || @y_coord < 0 || @y_coord > @map[0].length - 1
+        return  @x_coord < @north_boundary || 
+                @x_coord > @south_boundary || 
+                @y_coord < @west_boundary || 
+                @y_coord > @east_boundary
+    end
+
+    # Checks if trajectory has been previously traveled by laser in the @history hash
+    # Return of true if path has previously been traveled with same trajectory
+    # repeated entry trajectory -> duplicate proceeding trajectories -> loop
+    # 
+    # Updated the method to do a O(1) search rather than O(n) 
+    # Previous method version was iterating through @history in search of repeats
+    def previously_traveled?
+        @history[trajectory]
     end
 
     # Locate position of laser
     def find_laser
+        laser_coords = {}
+
         @map.each_with_index do |row, x_index|
             row.chars.each_with_index do |cell, y_index|
                 if cell == '@'
-                    return "#{x_index}, #{y_index}"
+                    laser_coords[:x_coord] = x_index
+                    laser_coords[:y_coord] = y_index
+                    return laser_coords
                 end
             end
         end
     end
 
+    def trajectory
+        return "#{@direction} #{@x_coord} #{@y_coord}"
+    end
+
 end
+
+module Doodad
+    # Doodads change laser direction
+    def self.redirect(symbol, direction)
+        # puts "I received symbol: #{symbol}"
+        case symbol
+            when '>'
+                return 'E'
+            when 'v'
+                return 'S'
+            when '<'
+                return 'W'
+            when '^'
+                return 'N'
+            # 180 degree mirror case
+            when 'O'
+                case direction
+                    when 'E'
+                        return 'W'
+                    when 'S'
+                        return 'N'
+                    when 'W'
+                        return 'E'
+                    when 'N'
+                        return 'S'
+                end
+            # Diagonal mirror case #1
+            when '/'
+                case direction
+                    when 'E'
+                        return 'N'
+                    when 'S'
+                        return 'W'
+                    when 'W'
+                        return 'S'
+                    when 'N'
+                        return 'E'
+                    end
+            # Diagonal mirror case #2
+            when '\\'
+                case direction
+                    when 'E'
+                      return 'S'
+                    when 'S'
+                        return 'E'
+                    when 'W'
+                        return 'N'
+                    when 'N'
+                        return 'W'
+                    end
+            else
+                # If no cases match, return the direction that was inputted
+                direction
+        end
+    end
+end
+
 
 layout = ""
 while (line = gets) do
@@ -135,4 +179,4 @@ while (line = gets) do
 end
 
 temp = Laser.new(layout)
-puts temp.distance_to_wall
+puts temp.distance_to_wall.to_s
